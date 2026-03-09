@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+a {
+  @apply underline text-blue-500;
+}
