@@ -1,500 +1,381 @@
-# Sharing Session: How we work with API in Next.js App Router
+# API Communication in Next.js
 
-## Presentation Timeline
+## Introduction
 
----
+**Goal:** Learn how to communicate with APIs effectively in Next.js while leveraging server-side principles.
 
-## Part 1: Introduction
+**The Problem:** If you've worked with client-side frameworks like Vite/React, you're used to fetching data in `useEffect` or React Query. In Next.js App Router, we have a different paradigm — we can (and should) fetch data directly on the server.
 
-### 1.1 Overview
+**Why it matters:**
 
-- Why external API patterns matter in modern Next.js:
-  - Performance implications (caching, CDN, server cost)
-  - User experience (speed, freshness)
-  - SEO considerations
-  - Scalability concerns
-- Session agenda:
-  - Query: SSG, SSR, and ISR patterns for external APIs
-  - Mutation: Server Actions, forms, and cache invalidation
+- Move data fetching from client to server → smaller bundle, faster page load
+- Leverage Next.js caching → reduce API calls, improve performance
+- Better SEO, better user experience
+- Use Server Actions for mutations → no need for manual API endpoints
 
----
+## API Query
 
-## Part 2: Query Patterns - External API Fetching
+### SSG (Static Site Generation)
 
-### 2.1 Fetching Data from External APIs
-
-**Key Concept:** Use `fetch` in Server Components with caching strategies
-
-```tsx
-// Direct fetch from external API
-export default async function Page() {
-  const res = await fetch("https://api.example.com/posts");
-  const data = await res.json();
-  return <PostList posts={data} />;
-}
-```
-
-**Benefits:**
-
-- Zero client-side JavaScript for data fetching
-- Server-side execution by default
-- Automatic caching with Next.js extended fetch API
-- Reduced bundle size
-
-### 2.2 SSG - Static Site Generation
-
-**When to use:**
-
-- Content that rarely changes (blog posts, docs, marketing pages)
-- Data that can be stale until next deployment
-- Public pages with high traffic
-
-```tsx
-// app/posts/page.tsx
-export default async function PostsPage() {
-  const res = await fetch("https://api.example.com/posts", {
-    cache: "force-cache", // Default - can be omitted
-  });
-  const posts = await res.json();
-  return <PostList posts={posts} />;
-}
-
-// Alternative: Using export (page-level)
-// const staticData = await fetch('https://...') // Default is force-cache
-```
-
-**How it works:**
-
-1. Data fetched during `next build`
-2. HTML rendered and cached
-3. Served from CDN (fastest possible)
-4. Only updates on next deployment
+**Mechanism:** Pages are rendered to HTML at build time. The HTML is generated once and reused for all requests.
 
 **Use cases:**
 
-- ✅ Blog posts & articles
-- ✅ Documentation pages
-- ✅ Marketing/landing pages
-- ✅ About pages
-- ✅ FAQ pages
+- Marketing pages, landing pages
+- Blogs, documentation
+- Product listings that don't change often
 
-### 2.3 SSR - Server-Side Rendering (10 min)
+### Flow
 
-**When to use:**
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant NextJS
+    participant API
 
-- Real-time or frequently changing data
-- User-specific content (requires authentication)
-- Data that must be fresh on every request
+    Note over NextJS,API: Build time
+    NextJS->>API: Fetch data
+    API-->>NextJS: Return data
+    NextJS->>NextJS: Generate HTML
+
+    Note over Browser,NextJS: Request
+    Browser->>NextJS: Request page
+    NextJS-->>Browser: Return pre-built HTML
+```
+
+### Example
 
 ```tsx
-// app/dashboard/page.tsx
-export default async function DashboardPage() {
-  const res = await fetch("https://api.example.com/user/analytics", {
-    cache: "no-store",
-  });
-  const analytics = await res.json();
-  return <Dashboard data={analytics} />;
+// app/ssg/page.tsx
+async function fetchAPI() {
+  const res = await fetch("https://api.example.com/data");
+  return res.json();
 }
 
-// Alternative: Using export (page-level)
+export default async function SSGPage() {
+  const data = await fetchAPI();
+
+  return <div>{data.content}</div>;
+}
+```
+
+### SSR (Server-Side Rendering)
+
+**Mechanism:** Pages are rendered on the server for each request. HTML is generated fresh on every request.
+
+**Use cases:**
+
+- Personalized dashboards
+- Real-time data (stock prices, live scores)
+- User-specific content
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant NextJS
+    participant API
+
+    Note over Browser,API: Request
+    Browser->>NextJS: Request page
+    NextJS->>API: Fetch data
+    API-->>NextJS: Return data
+    NextJS->>NextJS: Generate HTML
+    NextJS-->>Browser: Return HTML
+```
+
+### Example
+
+```tsx
+// app/ssr/page.tsx
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const res = await fetch("https://api.example.com/user/analytics");
-  const analytics = await res.json();
-  return <Dashboard data={analytics} />;
+async function fetchAPI() {
+  const res = await fetch("https://api.example.com/data");
+  return res.json();
+}
+
+export default async function SSRPage() {
+  const data = await fetchAPI();
+
+  return <div>{data.content}</div>;
 }
 ```
 
-**How it works:**
+**Alternative:** Use `cache: "no-store"` in fetch options.
 
-1. Data fetched on every request
-2. HTML rendered on each request
-3. Always fresh data
-4. Slower than static (server cost)
+```tsx
+const res = await fetch("https://api.example.com/data", {
+  cache: "no-store",
+});
+```
+
+### ISR (Incremental Static Regeneration)
+
+**Mechanism:** Pages are generated at build time but can be updated in the background after a specified interval. Combines static performance with dynamic updates.
 
 **Use cases:**
 
-- ✅ User dashboards (with auth)
-- ✅ Real-time analytics
-- ✅ Search results
-- ✅ User profiles (with personalized data)
-- ✅ Shopping carts
-- ✅ Admin panels
+- E-commerce product pages
+- News articles
+- Content that updates periodically
 
-### 2.4 ISR - Incremental Static Regeneration (12 min)
+### Flow
 
-**When to use:**
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant NextJS
+    participant API
 
-- Frequently changing data that tolerates some staleness
-- High-traffic pages that need periodic updates
-- Content that changes predictably
+    Note over NextJS,API: Build time
+    NextJS->>API: Fetch data
+    API-->>NextJS: Return data
+    NextJS->>NextJS: Generate HTML
+
+    Note over Browser,NextJS: Request (cached)
+    Browser->>NextJS: Request page
+    NextJS-->>Browser: Return cached HTML
+
+    Note over Browser,API: Request (not cached)
+    Browser->>NextJS: Request page
+    NextJS->>API: Fetch fresh data
+    API-->>NextJS: Return data
+    NextJS->>NextJS: Update cached HTML
+    NextJS-->>Browser: Return HTML
+```
+
+### Example
 
 ```tsx
-// app/products/page.tsx
-export const revalidate = 3600; // Revalidate every hour
+// app/isr/page.tsx
+// Primary method: use revalidate config
+export const revalidate = 60;
 
-export default async function ProductsPage() {
-  const res = await fetch("https://api.example.com/products");
-  const products = await res.json();
-  return <ProductList products={products} />;
+async function fetchAPI() {
+  const res = await fetch("https://api.example.com/data");
+  return res.json();
 }
 
-// Alternative: Using fetch options
-export default async function ProductsPage() {
-  const res = await fetch("https://api.example.com/products", {
-    next: { revalidate: 3600 }, // 1 hour
-  });
-  const products = await res.json();
-  return <ProductList products={products} />;
+export default async function ISRPage() {
+  const data = await fetchAPI();
+
+  return <div>{data.content}</div>;
 }
 ```
 
-**How it works:**
-
-1. Initial request: Fetch & cache (like SSG)
-2. Subsequent requests: Serve cached (fast)
-3. After revalidation period: Fetch fresh in background, update cache
-4. Next request: Serve fresh cache
-
-**Use cases:**
-
-- ✅ E-commerce product listings
-- ✅ News feeds
-- ✅ Event listings
-- ✅ Stock/inventory data
-- ✅ Weather forecasts
-- ✅ Aggregated data from multiple APIs
-
-**Revalidation Strategies:**
+**Alternative:** Use `next: { revalidate }` in fetch options.
 
 ```tsx
-// Strategy 1: Time-based (revalidate)
-export const revalidate = 60; // Every 60 seconds
-
-export default async function Page() {
-  const data = await fetch("https://api.example.com/data");
-  return <Component data={await data.json()} />;
-}
-
-// Strategy 2: Per-fetch revalidate
-export default async function Page() {
-  const data = await fetch("https://api.example.com/data", {
-    next: { revalidate: 60 }, // 1 minute for real-time data
-  });
-  return <Component data={await data.json()} />;
-}
-
-// Strategy 3: Tag-based revalidation (for granular control)
-export default async function Page() {
-  const data = await fetch("https://api.example.com/data", {
-    next: { tags: ["products"] },
-  });
-  return <Component data={await data.json()} />;
-}
-
-// Later, invalidate when needed
-// In a Server Action:
-// import { revalidateTag } from 'next/cache'
-// revalidateTag('products')
+const res = await fetch("https://api.example.com/data", {
+  next: { revalidate: 60 },
+});
 ```
 
-### 2.5 Comparison: SSG vs SSR vs ISR (5 min)
+### Comparison: SSG vs SSR vs ISR
 
 | Feature           | SSG (Static)           | SSR (Dynamic)       | ISR (Revalidate)          |
 | ----------------- | ---------------------- | ------------------- | ------------------------- |
 | **Build time**    | Yes                    | No                  | Yes (initial)             |
 | **Runtime fetch** | No                     | Yes                 | Yes (background)          |
 | **Freshness**     | Stale until build      | Always fresh        | Fresh after revalidation  |
-| **Speed**         | ⚡ Fastest             | 🐢 Slowest          | ⚡ Fast (cached)          |
-| **Server cost**   | 💰 Lowest              | 💰💰 Highest        | 💰 Low                    |
-| **CDN cache**     | ✅ Yes                 | ❌ No               | ✅ Yes                    |
+| **Speed**         | ❯❯❯ Fastest            | ❯ Slowest           | ❯❯ Fast (cached)          |
+| **Server cost**   | $ Lowest               | $$ Highest          | $ Low                     |
+| **CDN cache**     | Yes                    | No                  | Yes                       |
 | **Cache control** | `cache: 'force-cache'` | `cache: 'no-store'` | `next: { revalidate: N }` |
 | **Best for**      | Static content         | Real-time data      | Periodic updates          |
 
-**Decision Matrix:**
+### How Next.js determines rendering type
 
-- **SSG** - Use when content rarely changes, SEO is critical, or high traffic expected
-- **SSR** - Use when data must be fresh, user-specific content, or real-time requirements
-- **ISR** - Use when data changes frequently but tolerates staleness, or need balance of speed and freshness
+Next.js automatically chooses between **SSG**, **ISR**, and **SSR** based on your code.
 
-### 2.6 Parallel Data Fetching (5 min)
+| Type    | When                          | Cache     |
+| ------- | ----------------------------- | --------- |
+| **SSG** | Default fetch (`force-cache`) | Forever   |
+| **ISR** | Positive revalidate           | N seconds |
+| **SSR** | Dynamic features detected     | No cache  |
 
-**Performance optimization for multiple external APIs:**
+**SSG** (Static Site Generation) - cached forever:
 
 ```tsx
-// ❌ Sequential (slow)
-export default async function Page() {
-  const users = await fetch("https://api.example.com/users").then((r) => r.json());
-  const posts = await fetch("https://api.example.com/posts").then((r) => r.json());
-  const comments = await fetch("https://api.example.com/comments").then((r) => r.json());
+fetch(url); // default
+fetch(url, { cache: "force-cache" });
+```
 
-  // Total time = users + posts + comments
-  return <PageContent users={users} posts={posts} comments={comments} />;
+**ISR** (Incremental Static Regeneration) - cached for N seconds:
+
+```tsx
+export const revalidate = 60;
+fetch(url, { next: { revalidate: 60 } });
+```
+
+**SSR** (Server-Side Rendering) - no cache:
+
+```tsx
+export const dynamic = 'force-dynamic'
+fetch(url, { cache: 'no-store' })
+cookies(), headers()
+searchParams prop
+```
+
+## API Mutation
+
+### Approaches Overview
+
+| Approach                              | Pros                                                 | Cons                                                                    |
+| ------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Pure Server-Side (Server Actions)** | Works without JS                                     | No loading states, no optimistic updates, UI updates on next navigation |
+| **Client-Side + Server Actions**      | Loading states, optimistic updates, instant feedback | Requires JS, more complex                                               |
+
+### Pure Server-Side (Server Actions + revalidatePath)
+
+This approach uses only Server Actions without any client hooks. Works with progressive enhancement (works without JavaScript).
+
+```tsx
+// app/actions.ts
+"use server";
+
+export async function createPost(formData: FormData) {
+  const title = formData.get("title");
+
+  // 1. Mutate database
+  await db.post.create({ title });
+
+  // 2. Refresh cached data
+  revalidatePath("/posts");
+
+  // 3. Return result (optional)
+  return { success: true };
 }
 ```
 
 ```tsx
-// ✅ Parallel (fast)
-export default async function Page() {
-  // Start all requests concurrently
-  const usersPromise = fetch("https://api.example.com/users").then((r) => r.json());
-  const postsPromise = fetch("https://api.example.com/posts").then((r) => r.json());
-  const commentsPromise = fetch("https://api.example.com/comments").then((r) => r.json());
+// app/page.tsx - No 'use client' needed!
+import { createPost } from "./actions";
 
-  // Wait for all
-  const [users, posts, comments] = await Promise.all([usersPromise, postsPromise, commentsPromise]);
-
-  // Total time = max(users, posts, comments)
-  return <PageContent users={users} posts={posts} comments={comments} />;
-}
-```
-
-**Best Practice:** Extract data fetching functions for reusability
-
-```tsx
-// lib/api.ts
-export async function getUsers() {
-  const res = await fetch("https://api.example.com/users");
-  return res.json();
-}
-
-export async function getPosts() {
-  const res = await fetch("https://api.example.com/posts");
-  return res.json();
-}
-
-// app/dashboard/page.tsx
-import { getUsers, getPosts } from "@/lib/api";
-
-export default async function DashboardPage() {
-  const [users, posts] = await Promise.all([getUsers(), getPosts()]);
-  return <Dashboard users={users} posts={posts} />;
-}
-```
-
-### 2.7 Loading Handling (5 min)
-
-**Route-level loading (`loading.tsx`):**
-
-```tsx
-// app/posts/loading.tsx
-export default function Loading() {
-  return <div>Loading...</div>;
-}
-```
-
-```tsx
-// app/posts/page.tsx
-export default async function PostsPage() {
-  // While this fetches, loading.tsx is shown
-  const posts = await fetch("https://api.example.com/posts").then((r) => r.json());
-  return <PostList posts={posts} />;
-}
-```
-
-**Component-level loading with Suspense:**
-
-```tsx
-// app/dashboard/page.tsx
-import { Suspense } from "react";
-
-export default async function DashboardPage() {
+export default function Page() {
   return (
-    <div>
-      <h1>Dashboard</h1>
-      <Suspense fallback={<div>Loading analytics...</div>}>
-        <Analytics />
-      </Suspense>
-      <Suspense fallback={<div>Loading recent activity...</div>}>
-        <RecentActivity />
-      </Suspense>
-    </div>
+    <form action={createPost}>
+      <input name="title" />
+      <button type="submit">Create</button>
+    </form>
   );
 }
-
-async function Analytics() {
-  const data = await fetch("https://api.example.com/analytics").then((r) => r.json());
-  return <AnalyticsChart data={data} />;
-}
-
-async function RecentActivity() {
-  const activities = await fetch("https://api.example.com/activities").then((r) => r.json());
-  return <ActivityList activities={activities} />;
-}
 ```
 
-**Benefits of Suspense for loading:**
+#### Limitations
 
-- Streams content progressively (users see content as it loads)
-- Independent loading states for different sections
-- Better perceived performance
-- Prevents slow requests from blocking the entire page
+| Limitation                        | Description                                    |
+| --------------------------------- | ---------------------------------------------- |
+| **No loading state**              | Can't show "Submitting..." while mutation runs |
+| **No optimistic updates**         | UI doesn't update until next navigation        |
+| **UI updates on next navigation** | Current page doesn't re-render automatically   |
+| **No error UI**                   | Errors shown on next page load                 |
 
-**Best Practices:**
+> **Key Insight:** Even with `revalidatePath`, the current page doesn't re-render automatically. The cached data is refreshed, but users see the update only on their next navigation or page refresh.
 
-1. ✅ Use `loading.tsx` for route-level loading (simple, automatic)
-2. ✅ Use Suspense for component-level loading (granular control)
-3. ✅ Show meaningful loading states (skeletons, spinners)
-4. ✅ Make loading states match the layout of your content
-5. ❌ Don't show a full-page loader when you can stream content
-6. ❌ Don't use Suspense unnecessarily (adds complexity)
-
-### 2.8 Error Handling
+#### For Redirect After Mutation
 
 ```tsx
-// ✅ Proper error handling for external APIs
-export default async function Page() {
-  try {
-    const res = await fetch("https://api.example.com/data");
+// app/actions.ts
+"use server";
+import { redirect } from "next/navigation";
 
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
+export async function login(formData: FormData) {
+  // Authenticate
+  await auth.login(formData);
 
-    const data = await res.json();
-    return <Component data={data} />;
-  } catch (error) {
-    console.error("Failed to fetch data:", error);
-
-    // Return error component
-    return <ErrorState message="Failed to load data" />;
-
-    // Or throw to trigger Next.js error.tsx
-    // throw error
-  }
+  revalidatePath("/dashboard");
+  redirect("/dashboard"); // Navigate after mutation
 }
 ```
 
 ---
 
-## Part 3: Mutation Patterns
+### Client-Side with Server Actions
 
-### 3.1 Server Components + Server Actions (No Client Code)
+Add `'use client'` for loading states, error handling, and optimistic updates.
 
-**Core pattern:** Pure Server Components with Server Actions—no client JavaScript required.
-
-```
-User Action → Browser Submit → Server → Response → Browser
-```
-
-#### Basic Pattern
+#### useActionState - Form State Management
 
 ```tsx
-// app/actions.ts
-"use server";
-export async function createUser(prevState: any, formData: FormData) {
-  const user = await db.users.create({ name: formData.get("name") });
-  return { success: true, user };
-}
+"use client";
+import { useActionState } from "react";
+import { createPost } from "@/app/actions";
 
-// app/page.tsx (Server Component)
-import { createUser } from "@/app/actions";
+const initialState = { message: "", success: false };
 
-export default function Page() {
+export function PostForm() {
+  const [state, formAction, pending] = useActionState(createPost, initialState);
+
   return (
-    <form action={createUser}>
-      <input name="name" />
-      <button>Create</button>
+    <form action={formAction}>
+      <input name="title" />
+      <button disabled={pending}>{pending ? "Creating..." : "Create"}</button>
+      {state?.message && <p>{state.message}</p>}
     </form>
   );
 }
 ```
 
-### 3.2 Pattern 1: Return Data (Stay on Page)
-
-**Use case:** Show success/error messages, validation feedback.
+#### Error Handling with useActionState
 
 ```tsx
-// actions.ts
-export async function updateUser(prevState: any, formData: FormData) {
-  if (!formData.get("email")?.includes("@")) {
-    return { error: "Invalid email" };
+// Server Action returns errors as values
+export async function createPost(prevState, formData: FormData) {
+  const res = await fetch("...");
+  if (!res.ok) {
+    return { message: "Failed to create", success: false };
   }
-  const user = await db.users.update(formData.get("email"));
-  return { success: true, user };
+  return { success: true };
 }
 
-// page.tsx
-import { updateUser } from "@/app/actions";
-import { useFormState } from "react-dom";
-
-export default function Page() {
-  const [state, formAction] = useFormState(updateUser, null);
-  return (
-    <div>
-      {state?.error && <p>{state.error}</p>}
-      {state?.success && <p>Updated: {state.user.name}</p>}
-      <form action={formAction}>
-        <input name="email" />
-        <button>Update</button>
-      </form>
-    </div>
-  );
+// Client displays error
+{
+  state?.message && <p className="error">{state.message}</p>;
 }
 ```
 
-### 3.3 Pattern 2: Redirect (Navigate Away)
-
-**Use case:** After mutation, navigate to list/detail pages, prevent resubmission.
+#### useFormStatus - Nested Pending State
 
 ```tsx
-// actions.ts
-import { redirect } from "next/navigation";
+"use client";
+import { useFormStatus } from "react-dom"; // In Next.js, react-dom is available
 
-export async function deleteUser(prevState: any, formData: FormData) {
-  await db.users.delete(formData.get("id"));
-  redirect("/users");
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return <button disabled={pending}>{pending ? "Submitting..." : "Submit"}</button>;
 }
+```
 
-// page.tsx
-import { deleteUser } from "@/app/actions";
+#### useOptimistic - Instant UI Updates
 
-export default function DeletePage({ params }) {
+```tsx
+"use client";
+import { useOptimistic } from "react";
+
+export function TodoList({ todos }) {
+  const [optimisticTodos, addOptimistic] = useOptimistic(todos, (state, newTodo) => [
+    ...state,
+    newTodo,
+  ]);
+
+  async function formAction(formData: FormData) {
+    // 1. Update UI immediately
+    addOptimistic({ title: formData.get("title"), id: Date.now() });
+
+    // 2. Then call server
+    await createTodo(formData);
+  }
+
   return (
-    <form action={deleteUser}>
-      <input type="hidden" name="id" value={params.id} />
-      <button>Confirm Delete</button>
+    <form action={formAction}>
+      {optimisticTodos.map((t) => (
+        <div key={t.id}>{t.title}</div>
+      ))}
+      <SubmitButton />
     </form>
   );
 }
 ```
-
-### 3.4 Pattern 3: Revalidate + Return Data
-
-**Use case:** Update data, refresh cached pages, show result.
-
-```tsx
-// actions.ts
-import { revalidatePath } from "next/navigation";
-
-export async function createPost(prevState: any, formData: FormData) {
-  const post = await db.posts.create({ title: formData.get("title") });
-  revalidatePath("/posts");
-  return { success: true, post };
-}
-```
-
-### 3.5 Pattern 4: Revalidate + Redirect
-
-**Use case:** Update data, navigate to fresh page.
-
-```tsx
-// actions.ts
-import { revalidatePath, redirect } from "next/navigation";
-
-export async function updateProduct(prevState: any, formData: FormData) {
-  const product = await db.products.update(formData);
-  revalidatePath("/products");
-  redirect(`/products/${product.id}`);
-}
-```
-
-### 3.6 Quick Reference
-
-| Pattern               | Returns | Redirects | Revalidates | Best For                     |
-| --------------------- | ------- | --------- | ----------- | ---------------------------- |
-| Return Data           | ✅      | ❌        | ❌          | Messages, validation         |
-| Redirect Only         | ❌      | ✅        | ❌          | Navigation, prevent resubmit |
-| Revalidate + Return   | ✅      | ❌        | ✅          | Update cache, show result    |
-| Revalidate + Redirect | ❌      | ✅        | ✅          | Update cache, navigate       |

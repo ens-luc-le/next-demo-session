@@ -10,7 +10,7 @@ export default async function Page() {
 
   return (
     <div className="p-4">
-      <h1>SSR</h1>
+      <h1>Hello, SSR!</h1>
       <pre className="bg-surface-secondary p-4 rounded-lg w-max">
         <code>{JSON.stringify(now, null, 2)}</code>
       </pre>
