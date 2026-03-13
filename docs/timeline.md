@@ -150,7 +150,6 @@ sequenceDiagram
 
 ```tsx
 // app/isr/page.tsx
-// Primary method: use revalidate config
 export const revalidate = 60;
 
 async function fetchAPI() {

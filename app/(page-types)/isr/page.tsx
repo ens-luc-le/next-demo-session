@@ -1,12 +1,8 @@
-import axios from "axios";
-
 export default async function Page() {
   console.log("ISR page generate", Date.now());
 
-  const now = await axios
-    .get(`https://time.now/developer/api/timezone/Asia/Ho_Chi_Minh`)
-    .then((res) => res.data)
-    .finally(() => console.info("Fetched in ISR page"));
+  const res = await fetch("http://worldtimeapi.org/api/timezone/Asia/Ho_Chi_Minh");
+  const now = await res.json();
 
   return (
     <div className="p-4">
