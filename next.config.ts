@@ -1,3 +1,7 @@
 import { NextConfig } from "next";
 
-export default {} satisfies NextConfig;
+export default {
+  experimental: {
+    useCache: true,
+  },
+} satisfies NextConfig;
