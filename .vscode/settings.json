@@ -1,5 +1,5 @@
 {
-  "cSpell.words": ["heroui"],
+  "cSpell.words": ["Elysia", "Enosta", "heroui"],
   "claudeCode.environmentVariables": [
     { "name": "ANTHROPIC_AUTH_TOKEN", "value": "sk-gw-f874d4a3eb6141b8af43963357054cca" },
     { "name": "ANTHROPIC_BASE_URL", "value": "https://pikaai.xyz" },

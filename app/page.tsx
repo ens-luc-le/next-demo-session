@@ -9,7 +9,7 @@ export default function Home() {
       <br />
       <Link href="/ssg">SSG</Link>
       <br />
-      <Link href="/isr">ISG</Link>
+      <Link href="/isr">ISR</Link>
     </div>
   );
 }
